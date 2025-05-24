@@ -2,6 +2,7 @@ import google.generativeai as genai
 from agents.math_agent import MathAgent
 from agents.physics_agent import PhysicsAgent
 from tools.gemini_utils import call_gemini_with_retry
+from tools.conversation_manager import ConversationManager
 import logging
 
 # Set up logging
@@ -14,43 +15,97 @@ class TutorAgent:
         genai.configure(api_key=api_key)
         self.model = genai.GenerativeModel('gemini-2.0-flash')
 
+        # Initialize conversation manager
+        self.conversation_manager = ConversationManager()
+
         # Initialize sub-agents
         logger.info("Initializing sub-agents")
         self.math_agent = MathAgent(api_key)
         self.physics_agent = PhysicsAgent(api_key)
 
-    def classify_query(self, query):
+    def create_conversation(self, user_id=None):
+        """Create a new conversation and return its ID"""
+        return self.conversation_manager.create_conversation(user_id)
+
+    def classify_query(self, query, conversation_id=None):
         logger.info("Classifying query type")
-        # Simple keyword matching for intent recognition
-        query = query.lower()
-        math_keywords = ["solve", "calculate", "equation", "x =", "math"]
-        physics_keywords = ["newton", "force", "speed of light", "gravity", "physics"]
         
-        if any(keyword in query for keyword in math_keywords):
+        # Get conversation history if conversation_id is provided
+        history_text = ""
+        if conversation_id:
+            history_text = self.conversation_manager.get_formatted_history(conversation_id, limit=3)
+
+        query_lower = query.lower()
+        math_keywords = ["solve", "calculate", "equation", "x =", "math", "algebra", "arithmetic", "+", "-", "*", "/"]
+        physics_keywords = ["newton", "force", "speed of light", "gravity", "physics", "velocity", "acceleration", "energy"]
+        
+        if any(keyword in query_lower for keyword in math_keywords):
             logger.info("Query classified as math based on keywords")
             return "math"
-        elif any(keyword in query for keyword in physics_keywords):
+        elif any(keyword in query_lower for keyword in physics_keywords):
             logger.info("Query classified as physics based on keywords")
             return "physics"
         else:
             # Fallback: Use Gemini API for intent recognition
             logger.info("Using AI to classify query")
-            prompt = f"Classify this query as 'math' or 'physics': {query}"
+            context = f"Previous conversation:\n{history_text}\n\n" if history_text else ""
+            prompt = f"{context}Classify this query as 'math', 'physics', or 'unknown': {query}"
+
             response = call_gemini_with_retry(self.model, prompt)
             classification = response.strip().lower()
             print(f"AI called for Sub-Agent Selection")
             logger.info(f"AI classified query as: {classification}")
             return classification
 
-    def handle_query(self, query):
-        agent_type = self.classify_query(query)
+    def handle_query(self, query, conversation_id=None):
+        """Handle a query with optional conversation context"""
+        
+        # If no conversation_id provided, create a new conversation
+        if conversation_id is None:
+            conversation_id = self.create_conversation()
+            logger.info(f"Created new conversation: {conversation_id}")
+        
+        # Validate conversation exists
+        if not self.conversation_manager.conversation_exists(conversation_id):
+            logger.error(f"Conversation {conversation_id} not found")
+            return "Error: Invalid conversation ID", None
+        
+        agent_type = self.classify_query(query, conversation_id)
+        
+        # Get conversation history for the specific conversation
+        conversation_history = self.conversation_manager.get_conversation_history(conversation_id, limit=5)
         
         if agent_type == "math":
             logger.info("Routing query to Math Agent")
-            return self.math_agent.handle_query(query)
+            response = self.math_agent.handle_query(query, conversation_history)
         elif agent_type == "physics":
             logger.info("Routing query to Physics Agent")
-            return self.physics_agent.handle_query(query)
+            response = self.physics_agent.handle_query(query, conversation_history)
         else:
-            logger.warning("Could not classify query")
-            return "Sorry, I couldn't classify your query. Please specify if it's a math or physics question."
+            logger.warning("Could not classify query, providing general response")
+            history_text = self.conversation_manager.get_formatted_history(conversation_id, limit=3)
+            context = f"Previous conversation:\n{history_text}\n\n" if history_text else ""
+            prompt = f"{context}You are a helpful tutor. Please answer this question or reply with a general response based on the previous conversation: {query}"
+            response = call_gemini_with_retry(self.model, prompt)
+            agent_type = "general"
+
+        # Add the interaction to conversation history
+        self.conversation_manager.add_interaction(conversation_id, query, response, agent_type)
+        
+        return response, conversation_id
+
+    def get_conversation_history(self, conversation_id, limit=None):
+        """Get the history for a specific conversation"""
+        return self.conversation_manager.get_conversation_history(conversation_id, limit)
+
+    def list_conversations(self, user_id=None):
+        """List all conversations"""
+        return self.conversation_manager.list_conversations(user_id)
+
+    def delete_conversation(self, conversation_id):
+        """Delete a specific conversation"""
+        return self.conversation_manager.delete_conversation(conversation_id)
+
+    def get_conversation_info(self, conversation_id):
+        """Get information about a specific conversation"""
+        return self.conversation_manager.get_conversation_info(conversation_id)
