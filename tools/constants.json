@@ -1,0 +1,5 @@
+{
+    "speed of light": {"value": 299792458, "unit": "m/s"},
+    "gravitational constant": {"value": 6.67430e-11, "unit": "m^3 kg^-1 s^-2"},
+    "planck constant": {"value": 6.62607015e-34, "unit": "J s"}
+}
