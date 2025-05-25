@@ -1,6 +1,6 @@
 import google.generativeai as genai
 from tools.calculator import calculate
-from tools.equation_solver import solve_equation, solve_system_equations
+from tools.equation_solver import solve_equation
 from tools.gemini_utils import call_gemini_with_retry
 import re
 import logging
