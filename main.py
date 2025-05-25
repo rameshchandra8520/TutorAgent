@@ -5,12 +5,18 @@ from typing import Optional, List
 from dotenv import load_dotenv
 import os
 from agents.tutor_agent import TutorAgent
-
+from fastapi.responses import FileResponse, RedirectResponse
 load_dotenv()
 
 app = FastAPI()
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+favicon_path = os.path.join(os.path.dirname(__file__), "static", "favicon.svg")
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return FileResponse(favicon_path, media_type="image/svg+xml")
 
 # Constants for validation
 MAX_QUERY_LENGTH = 4000
@@ -124,4 +130,4 @@ async def delete_conversation(conversation_id: str):
 
 @app.get("/")
 async def root():
-    return {"message": "Visit /static/index.html to use the Tutor Agent"}
+    return RedirectResponse(url="/static/index.html")
