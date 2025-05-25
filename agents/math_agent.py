@@ -1,5 +1,6 @@
 import google.generativeai as genai
 from tools.calculator import calculate
+from tools.equation_solver import solve_equation, solve_system_equations
 from tools.gemini_utils import call_gemini_with_retry
 import re
 import logging
@@ -27,7 +28,32 @@ class MathAgent:
                     history_items.append(f"A: {h['response']}")
             history_text = "\n".join(history_items)
 
-        # Check if the query contains an arithmetic expression
+        # Check for equation solving patterns
+        equation_patterns = [
+            r"solve.*=",  # "solve x^2 + 3x + 2 = 0"
+            r"\w+\s*[\^²³⁴⁵⁶⁷⁸⁹⁰]\s*\d*.*=",  # equations with exponents
+            r"\w+\s*\*{2}\s*\d+.*=",  # equations with ** for exponents
+            r"x\s*=|y\s*=|z\s*=",  # explicit variable assignments
+            r"\w+\s*[+\-]\s*\w+\s*=",  # linear equations
+        ]
+        
+        query_lower = query.lower()
+        has_equation = any(re.search(pattern, query_lower) for pattern in equation_patterns)
+        
+        if has_equation or any(keyword in query_lower for keyword in ['solve', 'equation', 'find x', 'find y', 'find z']):
+            logger.info("Detected equation to solve")
+            result = solve_equation(query)
+            if not result.startswith("Error"):
+                context = f"Previous conversation:\n{history_text}\n\n" if history_text else ""
+                prompt = f"{context}Explain how to solve this equation step by step: {query}. Be clear and educational."
+                explanation = call_gemini_with_retry(self.model, prompt)
+                print(f"AI called for Equation Explanation")
+                return f"{result}\n\nStep-by-step explanation: {explanation}"
+            else:
+                logger.error(f"Error solving equation: {result}")
+                return result
+        
+        # Check if the query contains a simple arithmetic expression
         arithmetic_pattern = r"\d+\s*[\+\-\*/]\s*\d+"
         match = re.search(arithmetic_pattern, query)
         
@@ -45,7 +71,7 @@ class MathAgent:
             print(f"AI called for Math Explanation")
             return f"Result: {result}\nExplanation: {explanation}"
         else:
-            # No arithmetic expression, use Gemini for general math query
+            # No arithmetic expression or equation, use Gemini for general math query
             logger.info("Processing general math query")
             context = f"Previous conversation:\n{history_text}\n\n" if history_text else ""
             prompt = f"{context}You are a math tutor. Please answer this math question: {query}"
