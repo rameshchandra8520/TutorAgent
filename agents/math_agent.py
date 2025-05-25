@@ -40,7 +40,16 @@ class MathAgent:
         query_lower = query.lower()
         has_equation = any(re.search(pattern, query_lower) for pattern in equation_patterns)
         
-        if has_equation or any(keyword in query_lower for keyword in ['solve', 'equation', 'find x', 'find y', 'find z']):
+        # Check for specific equation solving requests (not general questions about how to solve)
+        specific_solve_patterns = [
+            r"solve\s+[x-z]\s*[\^²³⁴⁵⁶⁷⁸⁹⁰\*\+\-\d\s]*=",  # "solve x^2 + 3x + 2 = 0"
+            r"find\s+[x-z]\s+(?:when|if|where)",  # "find x when x^2 = 4"
+            r"[x-z]\s*[\^²³⁴⁵⁶⁷⁸⁹⁰\*\+\-\d\s]*=\s*[\d\-]",  # "x^2 + 3x = 4"
+        ]
+        
+        has_specific_equation = any(re.search(pattern, query_lower) for pattern in specific_solve_patterns)
+        
+        if has_equation or has_specific_equation:
             logger.info("Detected equation to solve")
             result = solve_equation(query)
             if not result.startswith("Error"):

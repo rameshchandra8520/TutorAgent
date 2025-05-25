@@ -27,6 +27,15 @@ def solve_equation(equation_str: str) -> str:
         # Clean up the equation string
         equation_str = equation_str.strip()
         
+        # Check if this looks like a question rather than an equation
+        question_indicators = [
+            "how do i", "how to", "what is", "explain", "tell me", "can you", 
+            "help me", "show me", "teach me", "?", "steps to", "method"
+        ]
+        
+        if any(indicator in equation_str.lower() for indicator in question_indicators):
+            return f"Error: This appears to be a question about solving equations rather than a specific equation to solve. Please provide a specific equation like 'x^2 + 3x + 2 = 0' or 'solve x^2 - 4 = 0'."
+        
         # Remove "solve for" instructions and extract variable if specified
         solve_pattern = r"solve for (\w+):\s*(.+)"
         match = re.search(solve_pattern, equation_str.lower())
