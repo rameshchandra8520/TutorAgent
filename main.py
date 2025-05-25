@@ -19,6 +19,7 @@ MIN_QUERY_LENGTH = 1
 class QueryRequest(BaseModel):
     query: str
     conversation_id: Optional[str] = None
+    preferred_agent: Optional[str] = None
     
     @validator('query')
     def validate_query(cls, v):
@@ -32,6 +33,14 @@ class QueryRequest(BaseModel):
             raise ValueError(f"Query exceeds maximum length of {MAX_QUERY_LENGTH} characters")
         
         return v.strip()
+    
+    @validator('preferred_agent')
+    def validate_preferred_agent(cls, v):
+        if v is not None:
+            allowed_agents = ['math', 'physics', 'chemistry', 'history', 'general', 'auto']
+            if v not in allowed_agents:
+                raise ValueError(f"Invalid agent. Must be one of: {', '.join(allowed_agents)}")
+        return v
 
 class ConversationRequest(BaseModel):
     user_id: Optional[str] = None
@@ -42,6 +51,7 @@ class ConversationResponse(BaseModel):
 class QueryResponse(BaseModel):
     response: str
     conversation_id: str
+    agent_used: Optional[str] = None
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 tutor_agent = TutorAgent(GEMINI_API_KEY)
@@ -59,8 +69,12 @@ async def create_conversation(request: ConversationRequest):
 async def ask_tutor(request: QueryRequest):
     """Ask a question to the tutor with optional conversation context"""
     try:
-        response, conversation_id = tutor_agent.handle_query(request.query, request.conversation_id)
-        return QueryResponse(response=response, conversation_id=conversation_id)
+        response, conversation_id, agent_used = tutor_agent.handle_query(
+            request.query, 
+            request.conversation_id,
+            request.preferred_agent
+        )
+        return QueryResponse(response=response, conversation_id=conversation_id, agent_used=agent_used)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
